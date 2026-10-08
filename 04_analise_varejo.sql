@@ -1,8 +1,8 @@
 
 USE varejo_analytics;
 
------ mês/canal/UF/categoria
-select pe.canal,cl.uf,pr.categoria,MONTH(pe.data_pedido) as mês, SUM(ip.quantidade*ip.preco_unitario) as Receita
+-- mês/canal/UF/categoria
+select pe.canal,cl.uf,pr.categoria,MONTH(pe.data_pedido) as mês,YEAR(pe.data_pedido) AS ano, SUM(ip.quantidade*ip.preco_unitario) as Receita
 from produtos as pr
 join itens_pedido as ip
 on pr.produto_id=ip.produto_id
@@ -10,8 +10,9 @@ join pedidos as pe
 on ip.pedido_id=pe.pedido_id
 join clientes as cl
 on pe.cliente_id=cl.cliente_id
-GROUP BY MONTH(pe.data_pedido),pe.canal,cl.uf,pr.categoria
-ORDER BY MONTH(pe.data_pedido),pe.canal,cl.uf,pr.categoria;
+where pe.status='Concluído'
+GROUP BY MONTH(pe.data_pedido),YEAR(pe.data_pedido),pe.canal,cl.uf,pr.categoria
+ORDER BY MONTH(pe.data_pedido),YEAR(pe.data_pedido),pe.canal,cl.uf,pr.categoria;
 
 -- ticket médio por pedido 
 
@@ -20,6 +21,7 @@ select pe.pedido_id, SUM(ip.quantidade*ip.preco_unitario) as receita
 from pedidos as pe
 join itens_pedido as ip
 on pe.pedido_id=ip.pedido_id
+where pe.status='Concluído'
 group by pe.pedido_id)
 SELECT
     SUM(receita) / COUNT(pedido_id) AS ticket_medio
@@ -32,6 +34,9 @@ row_number() over(order by SUM(ip.quantidade*ip.preco_unitario) desc)  as rankin
 from produtos as pr 
 join itens_pedido as ip
 on pr.produto_id=ip.produto_id
+join pedidos as pe
+on ip.pedido_id=pe.pedido_id
+where pe.status='Concluído'
 group by  pr.produto_id,pr.produto)
 select produto_id, produto, receita, ranking
 from  cte_produto where ranking <=10; 
@@ -40,12 +45,14 @@ from  cte_produto where ranking <=10;
 WITH cte as(
 select pr.categoria, SUM(
     ip.quantidade * ip.preco_unitario
-    * (1 - ip.desconto_pct / 100)
 ) as receita,
-SUM(ip.quantidade*pr.custo_unitario) as custo,  SUM(ip.quantidade * ip.preco_unitario * (1 - ip.desconto_pct / 100))- SUM(ip.quantidade * pr.custo_unitario) AS lucro
+SUM(ip.quantidade*pr.custo_unitario) as custo,  SUM(ip.quantidade * ip.preco_unitario)- SUM(ip.quantidade * pr.custo_unitario) AS lucro
 from produtos as pr
 join itens_pedido as ip
 on pr.produto_id=ip.produto_id
+join pedidos as pe
+on ip.pedido_id=pe.pedido_id
+where pe.status = 'Concluído'
 group by pr.categoria),
 cte_analise as (
 select categoria, receita, custo,lucro / NULLIF(receita, 0) * 100 AS margem from cte
@@ -93,5 +100,14 @@ join pedidos as pe
 on ve.vendedor_id=pe.vendedor_id
 join itens_pedido as ip
 on pe.pedido_id=ip.pedido_id
+where pe.status = 'Concluído'
 group by ve.vendedor
-order by receita;
+order by receita desc;
+
+--  Receita líquida 
+select ip.pedido_id, SUM( ip.quantidade * ip.preco_unitario) as Receita_líquida
+from itens_pedido as ip
+join pedidos as pe
+on ip.pedido_id=pe.pedido_id
+where pe.status='Concluído'
+group by ip.pedido_id;
